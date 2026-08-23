@@ -1,0 +1,57 @@
+{
+  "identifier": "com.clip.extension.obsidian",
+  "name": "Capture to Obsidian",
+  "icon": "icon.svg",
+  "match": "any",
+  "description": "Sends selected text to a note in Obsidian. Requires the free \"Advanced URI\" community plugin, installed and enabled in Obsidian's Community Plugins settings.",
+  "options": [
+    {
+      "key": "vaultName",
+      "label": "Vault Name",
+      "type": "string",
+      "placeholder": "My Vault",
+      "defaultValue": null,
+      "description": "Vault name: the exact name of your Obsidian vault (case-sensitive), shown in Obsidian's vault switcher. Required."
+    },
+    {
+      "key": "fileName",
+      "label": "Note Name",
+      "type": "string",
+      "placeholder": "Clippings",
+      "defaultValue": null,
+      "description": "Note name: the specific note to capture into — not a folder, though you can prefix a folder path, e.g. Inbox/Clippings. Leave blank to use today's Daily Note instead."
+    },
+    {
+      "key": "heading",
+      "label": "Heading",
+      "type": "string",
+      "placeholder": "Clippings",
+      "defaultValue": null,
+      "description": "Heading: an existing heading in that note to insert captures under. Leave blank to just append to the end of the file."
+    },
+    {
+      "key": "newFile",
+      "label": "Always create a new file",
+      "type": "bool",
+      "placeholder": null,
+      "defaultValue": "false",
+      "description": "When on, each capture creates its own new file instead of being appended to the note above."
+    },
+    {
+      "key": "sourceLink",
+      "label": "Include source app",
+      "type": "bool",
+      "placeholder": null,
+      "defaultValue": "true",
+      "description": "Adds a line noting which app the text was copied from."
+    },
+    {
+      "key": "includeTimestamp",
+      "label": "Include timestamp",
+      "type": "bool",
+      "placeholder": null,
+      "defaultValue": "false",
+      "description": "Prefixes the capture with the current time, e.g. \"- 17:58 ...\"."
+    }
+  ]
+}

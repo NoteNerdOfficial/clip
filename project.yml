@@ -1,0 +1,47 @@
+name: Clip
+options:
+  bundleIdPrefix: com.clip
+  deploymentTarget:
+    macOS: "13.0"
+  xcodeVersion: "16.0"
+  groupSortPosition: top
+  generateEmptyDirectories: true
+
+targets:
+  Clip:
+    type: application
+    platform: macOS
+    deploymentTarget: "13.0"
+    sources:
+      - path: Clip
+        excludes:
+          - "Resources/Extensions/**"
+      - path: Clip/Resources/Extensions
+        type: folder
+    info:
+      path: Clip/Info.plist
+      properties:
+        CFBundleDisplayName: Clip
+        LSUIElement: true
+        NSAccessibilityUsageDescription: "Clip uses Accessibility access to detect when you select text in other apps, so it can show a popup of quick actions."
+        NSHighResolutionCapable: true
+        NSSupportsAutomaticGraphicsSwitching: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.clip.app
+        SWIFT_VERSION: "5.0"
+        MACOSX_DEPLOYMENT_TARGET: "13.0"
+        SWIFT_STRICT_CONCURRENCY: minimal
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_ENTITLEMENTS: Clip/Clip.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
+        ALWAYS_SEARCH_USER_PATHS: NO
+        CLANG_ENABLE_MODULES: YES
+        SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+      configs:
+        Debug:
+          SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+          DEBUG_INFORMATION_FORMAT: dwarf
+        Release:
+          SWIFT_OPTIMIZATION_LEVEL: "-O"
+          DEBUG_INFORMATION_FORMAT: dwarf-with-dsym

@@ -1,0 +1,25 @@
+{
+  "identifier": "com.clip.extension.asana",
+  "name": "Add Asana Task",
+  "icon": "icon.svg",
+  "match": "any",
+  "description": "Creates a task in Asana from the selected text, using the task's title.",
+  "options": [
+    {
+      "key": "accessToken",
+      "label": "Personal Access Token",
+      "type": "secret",
+      "placeholder": "2/12345.../abcdef...",
+      "defaultValue": null,
+      "description": "PAT: In Asana, click your profile photo → Settings → Apps → Manage Developer Apps → Personal Access Tokens → Create new token. Required."
+    },
+    {
+      "key": "workspaceGid",
+      "label": "Workspace Number",
+      "type": "string",
+      "placeholder": "123456789",
+      "defaultValue": null,
+      "description": "Workspace number: this is the number after /0/ in your Asana URL while browsing that workspace, e.g. app.asana.com/0/123456789/list. Required — tasks need a workspace to be filed in."
+    }
+  ]
+}

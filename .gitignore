@@ -1,0 +1,6 @@
+.DS_Store
+/Clip.xcodeproj/
+*.xcuserstate
+xcuserdata/
+/build/
+/dist/
