@@ -22,6 +22,7 @@ targets:
       path: Clip/Info.plist
       properties:
         CFBundleDisplayName: Clip
+        CFBundleIconFile: AppIcon
         LSUIElement: true
         NSAccessibilityUsageDescription: "Clip uses Accessibility access to detect when you select text in other apps, so it can show a popup of quick actions."
         NSHighResolutionCapable: true
