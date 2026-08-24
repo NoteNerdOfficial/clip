@@ -73,8 +73,15 @@ final class SelectionMonitor {
         }
 
         let sourceApp = NSWorkspace.shared.frontmostApplication?.localizedName
+        let frontBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
 
         // Tried in order, least privileged / least likely to be blocked first:
+        // 0. In Chrome specifically: ask Chrome to run window.getSelection()
+        //    directly in the page via its own AppleScript "execute javascript"
+        //    command — confirmed to be how PopClip does it there (Automation
+        //    permission scoped to Google Chrome.app specifically, no System
+        //    Events, no Accessibility). Requires Chrome's View > Developer >
+        //    "Allow JavaScript from Apple Events" to be turned on.
         // 1. Read the system Find pasteboard — a plain pasteboard (same trust
         //    level as the regular clipboard, no special permission at all) that
         //    AppKit and modern Chromium text views keep in sync with the current
@@ -83,6 +90,12 @@ final class SelectionMonitor {
         //    Automation permission) to read the selection on our behalf.
         // 3. Read it directly in-process via the Accessibility API.
         // 4. Simulate Cmd-C and diff the pasteboard.
+        if frontBundleID == "com.google.Chrome", let chromeText = readSelectionViaChromeJS() {
+            DebugLog.write("captureSelection — got selection via Chrome JS execute, length=\(chromeText.count)")
+            emit(text: chromeText, sourceApp: sourceApp, at: point)
+            return
+        }
+
         let findPasteboard = NSPasteboard(name: .find)
         if findPasteboard.changeCount != findChangeCountAtMouseDown,
            let text = findPasteboard.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -155,6 +168,43 @@ final class SelectionMonitor {
                 completion(text?.isEmpty == false ? text : nil)
             }
         }
+    }
+
+    /// Asks Chrome to run `window.getSelection().toString()` in the active tab
+    /// via its own AppleScript "execute javascript" command. Requires Chrome's
+    /// View > Developer > "Allow JavaScript from Apple Events" to be enabled;
+    /// returns nil (not an error) if that's off, so callers fall through cleanly.
+    private func readSelectionViaChromeJS() -> String? {
+        let script = """
+        function run() {
+          try {
+            const chrome = Application("Google Chrome");
+            const win = chrome.windows[0];
+            if (!win) return "";
+            const result = win.activeTab.execute({ javascript: "window.getSelection().toString()" });
+            return result || "";
+          } catch (e) {
+            return "";
+          }
+        }
+        """
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = ["-l", "JavaScript", "-e", script]
+        let stdoutPipe = Pipe()
+        process.standardOutput = stdoutPipe
+        process.standardError = Pipe()
+
+        do {
+            try process.run()
+        } catch {
+            DebugLog.write("readSelectionViaChromeJS — failed to launch osascript: \(error)")
+            return nil
+        }
+        process.waitUntilExit()
+        let data = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+        let text = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text?.isEmpty == false ? text : nil
     }
 
     /// Asks the currently focused UI element directly for its selected text —
