@@ -69,17 +69,76 @@ final class SelectionMonitor {
             return
         }
 
-        if let axText = readSelectionViaAX() {
-            DebugLog.write("captureSelection — got selection via Accessibility API, length=\(axText.count)")
-            emit(text: axText, sourceApp: NSWorkspace.shared.frontmostApplication?.localizedName, at: point)
-            return
-        }
+        let sourceApp = NSWorkspace.shared.frontmostApplication?.localizedName
 
-        DebugLog.write("captureSelection — AX read empty, falling back to simulated Cmd-C")
-        let priorChangeCount = NSPasteboard.general.changeCount
-        DebugLog.write("captureSelection — priorChangeCount=\(priorChangeCount) AXIsProcessTrusted=\(AXIsProcessTrusted())")
-        postCmdC()
-        pollForChange(priorChangeCount: priorChangeCount, attemptsLeft: 12, point: point)
+        // Tried in order of trust boundary, least likely to be blocked first:
+        // 1. Ask System Events (a separate, Apple-signed process, gated by the
+        //    Automation permission) to read the selection on our behalf.
+        // 2. Read it directly in-process via the Accessibility API.
+        // 3. Simulate Cmd-C and diff the pasteboard.
+        readSelectionViaSystemEvents { [weak self] systemEventsText in
+            guard let self else { return }
+            if let systemEventsText {
+                DebugLog.write("captureSelection — got selection via System Events, length=\(systemEventsText.count)")
+                self.emit(text: systemEventsText, sourceApp: sourceApp, at: point)
+                return
+            }
+
+            if let axText = self.readSelectionViaAX() {
+                DebugLog.write("captureSelection — got selection via in-process AX, length=\(axText.count)")
+                self.emit(text: axText, sourceApp: sourceApp, at: point)
+                return
+            }
+
+            DebugLog.write("captureSelection — System Events and AX both empty, falling back to simulated Cmd-C")
+            let priorChangeCount = NSPasteboard.general.changeCount
+            DebugLog.write("captureSelection — priorChangeCount=\(priorChangeCount) AXIsProcessTrusted=\(AXIsProcessTrusted())")
+            self.postCmdC()
+            self.pollForChange(priorChangeCount: priorChangeCount, attemptsLeft: 12, point: point)
+        }
+    }
+
+    /// Asks System Events — a separate, Apple-signed process, gated by the
+    /// Automation permission rather than Accessibility — to read the focused
+    /// element's selected text on our behalf via JXA. Runs off the main thread;
+    /// completion is called back on the main actor.
+    private func readSelectionViaSystemEvents(completion: @escaping (String?) -> Void) {
+        let script = """
+        function run() {
+          const systemEvents = Application("System Events");
+          const processes = systemEvents.processes.whose({ frontmost: true });
+          if (processes.length === 0) return "";
+          try {
+            const focused = processes[0].attributes.byName("AXFocusedUIElement").value();
+            const text = focused.attributes.byName("AXSelectedText").value();
+            return text || "";
+          } catch (e) {
+            return "";
+          }
+        }
+        """
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = ["-l", "JavaScript", "-e", script]
+        let stdoutPipe = Pipe()
+        process.standardOutput = stdoutPipe
+        process.standardError = Pipe()
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                try process.run()
+            } catch {
+                DebugLog.write("readSelectionViaSystemEvents — failed to launch osascript: \(error)")
+                DispatchQueue.main.async { completion(nil) }
+                return
+            }
+            process.waitUntilExit()
+            let data = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+            let text = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            DispatchQueue.main.async {
+                completion(text?.isEmpty == false ? text : nil)
+            }
+        }
     }
 
     /// Asks the currently focused UI element directly for its selected text —
