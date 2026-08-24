@@ -13,7 +13,7 @@ struct PermissionsOnboardingView: View {
             VStack(spacing: 8) {
                 Text("Enable Accessibility Access")
                     .font(.title2.bold())
-                Text("Clip needs Accessibility access to detect when you select text in other apps and show the action popup.")
+                Text("Optional. Clip can already detect selections in most apps without it. Granting Accessibility access adds a couple of fallback detection methods for the few apps where that isn't enough.")
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)

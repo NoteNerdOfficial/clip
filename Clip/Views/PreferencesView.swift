@@ -1,4 +1,5 @@
 import SwiftUI
+import ApplicationServices
 
 struct PreferencesView: View {
     @ObservedObject var store = ExtensionStore.shared
@@ -21,6 +22,22 @@ struct PreferencesView: View {
                         .onChange(of: launchAtLogin) { newValue in LaunchAtLogin.set(newValue) }
                     Button("Open Extensions Folder…") {
                         store.openExtensionsFolder()
+                    }
+                }
+                Section {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("Accessibility Access")
+                            Spacer()
+                            Text(AXIsProcessTrusted() ? "Granted" : "Not Granted")
+                                .foregroundStyle(.secondary)
+                        }
+                        Text("Optional. Clip already detects selections in most apps without it — this adds fallback methods for the few apps where that isn't enough.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Button("Grant Access…") {
+                            AccessibilityOnboardingWindowController.shared.show()
+                        }
                     }
                 }
             }
