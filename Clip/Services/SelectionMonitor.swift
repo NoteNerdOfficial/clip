@@ -18,9 +18,11 @@ final class SelectionMonitor {
 
     func start() {
         guard monitor == nil else { return }
+        NSLog("[Clip] start() — AXIsProcessTrusted=\(AXIsProcessTrusted())")
         monitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .leftMouseUp]) { [weak self] event in
             Task { @MainActor in self?.handle(event) }
         }
+        NSLog("[Clip] start() — monitor installed=\(monitor != nil)")
     }
 
     func stop() {
@@ -34,11 +36,17 @@ final class SelectionMonitor {
             mouseDownLocation = NSEvent.mouseLocation
             mouseDownClickCount = event.clickCount
         case .leftMouseUp:
-            guard let downLocation = mouseDownLocation else { return }
+            guard let downLocation = mouseDownLocation else {
+                NSLog("[Clip] mouseUp with no tracked mouseDown — ignoring")
+                return
+            }
             let upLocation = NSEvent.mouseLocation
-            let dragged = hypot(upLocation.x - downLocation.x, upLocation.y - downLocation.y) > 4
+            let distance = hypot(upLocation.x - downLocation.x, upLocation.y - downLocation.y)
+            let dragged = distance > 4
             let multiClick = mouseDownClickCount >= 2
             mouseDownLocation = nil
+            let frontApp = NSWorkspace.shared.frontmostApplication?.localizedName ?? "?"
+            NSLog("[Clip] mouseUp in \(frontApp) — distance=\(distance) clickCount=\(mouseDownClickCount) dragged=\(dragged) multiClick=\(multiClick)")
             guard dragged || multiClick else { return }
             // Give the target app a brief moment to finish committing its selection
             // state before synthesizing the copy — some apps (e.g. Electron-based
@@ -55,10 +63,12 @@ final class SelectionMonitor {
     private func captureSelection(at point: NSPoint) {
         // Don't trigger on our own popup / windows.
         if NSWorkspace.shared.frontmostApplication?.bundleIdentifier == Bundle.main.bundleIdentifier {
+            NSLog("[Clip] captureSelection — skipped, frontmost is Clip itself")
             return
         }
 
         let priorChangeCount = NSPasteboard.general.changeCount
+        NSLog("[Clip] captureSelection — priorChangeCount=\(priorChangeCount) AXIsProcessTrusted=\(AXIsProcessTrusted())")
         postCmdC()
         pollForChange(priorChangeCount: priorChangeCount, attemptsLeft: 12, point: point)
     }
@@ -66,10 +76,12 @@ final class SelectionMonitor {
     private func pollForChange(priorChangeCount: Int, attemptsLeft: Int, point: NSPoint) {
         let pasteboard = NSPasteboard.general
         if pasteboard.changeCount != priorChangeCount {
-            // Deliberately left on the clipboard, matching what a real Cmd-C would
-            // have done — the user can still paste it normally elsewhere, popup or not.
             let newString = pasteboard.string(forType: .string)
-            guard let text = newString?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return }
+            NSLog("[Clip] pollForChange — pasteboard changed, string=\(String((newString ?? "nil").prefix(40)))")
+            guard let text = newString?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else {
+                NSLog("[Clip] pollForChange — trimmed string was empty, not showing popup")
+                return
+            }
             let selection = ClipSelection(
                 text: text,
                 kind: classify(text),
@@ -79,7 +91,10 @@ final class SelectionMonitor {
             return
         }
 
-        guard attemptsLeft > 0 else { return }
+        guard attemptsLeft > 0 else {
+            NSLog("[Clip] pollForChange — gave up after all attempts, pasteboard never changed")
+            return
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) { [weak self] in
             self?.pollForChange(priorChangeCount: priorChangeCount, attemptsLeft: attemptsLeft - 1, point: point)
         }
