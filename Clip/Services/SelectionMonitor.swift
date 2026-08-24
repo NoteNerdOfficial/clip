@@ -2,9 +2,9 @@ import AppKit
 import ApplicationServices
 
 /// Detects a text selection in any other app by watching for a drag-select or
-/// multi-click. Tries reading the selection directly via the Accessibility API
-/// first (a passive read, no synthetic input); if the focused app doesn't
-/// expose that, falls back to simulating Cmd-C and diffing the pasteboard.
+/// multi-click, then tries reading it back via several methods, roughly in
+/// order of least likely to be restricted: the system Find pasteboard, System
+/// Events, in-process Accessibility API, then simulating Cmd-C as a last resort.
 @MainActor
 final class SelectionMonitor {
     static let shared = SelectionMonitor()
@@ -12,6 +12,7 @@ final class SelectionMonitor {
     private var monitor: Any?
     private var mouseDownLocation: NSPoint?
     private var mouseDownClickCount: Int = 0
+    private var mouseDownFindChangeCount: Int = 0
 
     private static let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
 
@@ -38,6 +39,7 @@ final class SelectionMonitor {
         case .leftMouseDown:
             mouseDownLocation = NSEvent.mouseLocation
             mouseDownClickCount = event.clickCount
+            mouseDownFindChangeCount = NSPasteboard(name: .find).changeCount
         case .leftMouseUp:
             guard let downLocation = mouseDownLocation else {
                 DebugLog.write("mouseUp with no tracked mouseDown — ignoring")
@@ -47,6 +49,7 @@ final class SelectionMonitor {
             let distance = hypot(upLocation.x - downLocation.x, upLocation.y - downLocation.y)
             let dragged = distance > 4
             let multiClick = mouseDownClickCount >= 2
+            let findChangeCountAtMouseDown = mouseDownFindChangeCount
             mouseDownLocation = nil
             let frontApp = NSWorkspace.shared.frontmostApplication?.localizedName ?? "?"
             DebugLog.write("mouseUp in \(frontApp) — distance=\(distance) clickCount=\(mouseDownClickCount) dragged=\(dragged) multiClick=\(multiClick)")
@@ -55,14 +58,14 @@ final class SelectionMonitor {
             // state before reading/copying it — some apps (e.g. Electron-based ones)
             // finalize selection asynchronously relative to the raw mouse event.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-                self?.captureSelection(at: upLocation)
+                self?.captureSelection(at: upLocation, findChangeCountAtMouseDown: findChangeCountAtMouseDown)
             }
         default:
             break
         }
     }
 
-    private func captureSelection(at point: NSPoint) {
+    private func captureSelection(at point: NSPoint, findChangeCountAtMouseDown: Int) {
         // Don't trigger on our own popup / windows.
         if NSWorkspace.shared.frontmostApplication?.bundleIdentifier == Bundle.main.bundleIdentifier {
             DebugLog.write("captureSelection — skipped, frontmost is Clip itself")
@@ -71,11 +74,24 @@ final class SelectionMonitor {
 
         let sourceApp = NSWorkspace.shared.frontmostApplication?.localizedName
 
-        // Tried in order of trust boundary, least likely to be blocked first:
-        // 1. Ask System Events (a separate, Apple-signed process, gated by the
+        // Tried in order, least privileged / least likely to be blocked first:
+        // 1. Read the system Find pasteboard — a plain pasteboard (same trust
+        //    level as the regular clipboard, no special permission at all) that
+        //    AppKit and modern Chromium text views keep in sync with the current
+        //    selection as you select it, no keystroke needed.
+        // 2. Ask System Events (a separate, Apple-signed process, gated by the
         //    Automation permission) to read the selection on our behalf.
-        // 2. Read it directly in-process via the Accessibility API.
-        // 3. Simulate Cmd-C and diff the pasteboard.
+        // 3. Read it directly in-process via the Accessibility API.
+        // 4. Simulate Cmd-C and diff the pasteboard.
+        let findPasteboard = NSPasteboard(name: .find)
+        if findPasteboard.changeCount != findChangeCountAtMouseDown,
+           let text = findPasteboard.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !text.isEmpty {
+            DebugLog.write("captureSelection — got selection via Find pasteboard, length=\(text.count)")
+            emit(text: text, sourceApp: sourceApp, at: point)
+            return
+        }
+
         readSelectionViaSystemEvents { [weak self] systemEventsText in
             guard let self else { return }
             if let systemEventsText {
@@ -90,7 +106,7 @@ final class SelectionMonitor {
                 return
             }
 
-            DebugLog.write("captureSelection — System Events and AX both empty, falling back to simulated Cmd-C")
+            DebugLog.write("captureSelection — Find pasteboard, System Events, and AX all empty, falling back to simulated Cmd-C")
             let priorChangeCount = NSPasteboard.general.changeCount
             DebugLog.write("captureSelection — priorChangeCount=\(priorChangeCount) AXIsProcessTrusted=\(AXIsProcessTrusted())")
             self.postCmdC()
