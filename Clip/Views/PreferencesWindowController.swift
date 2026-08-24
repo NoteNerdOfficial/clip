@@ -12,9 +12,16 @@ final class PreferencesWindowController {
     func show() {
         if window == nil {
             let hosting = NSHostingController(rootView: PreferencesView())
-            let window = NSWindow(contentViewController: hosting)
+            hosting.sizingOptions = []
+            let window = NSWindow(
+                contentRect: .zero,
+                styleMask: [.titled, .closable, .miniaturizable],
+                backing: .buffered,
+                defer: false
+            )
             window.title = "Clip Preferences"
-            window.styleMask = [.titled, .closable, .miniaturizable]
+            window.contentViewController = hosting
+            window.setContentSize(hosting.view.fittingSize)
             window.isReleasedWhenClosed = false
             window.center()
             self.window = window

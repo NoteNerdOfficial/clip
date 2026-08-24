@@ -39,9 +39,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         ))
         let hosting = NSHostingController(rootView: root)
-        let window = NSWindow(contentViewController: hosting)
+        // Size the window once from the content's natural size, then stop tracking.
+        // NSWindow(contentViewController:) keeps the window and the hosting
+        // controller's preferred size continuously in sync, which for
+        // height-flexible SwiftUI content (wrapped text here) can feed back
+        // into itself as a reentrant layout loop — a hard crash on macOS 26.
+        hosting.sizingOptions = []
+        let window = NSWindow(
+            contentRect: .zero,
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
         window.title = "Clip"
-        window.styleMask = [.titled, .closable]
+        window.contentViewController = hosting
+        window.setContentSize(hosting.view.fittingSize)
         window.center()
         window.isReleasedWhenClosed = false
         window.makeKeyAndOrderFront(nil)
