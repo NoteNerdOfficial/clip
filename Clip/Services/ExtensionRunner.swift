@@ -35,6 +35,10 @@ enum ExtensionRunner {
     }
 
     private static func notifyFailure(message: String) {
+        // Always visible in Console/log stream, independent of whether the user
+        // granted notification permission (which the popup toast depends on).
+        NSLog("[Clip] action failed: \(message)")
+
         let content = UNMutableNotificationContent()
         content.title = "Clip action failed"
         content.body = message

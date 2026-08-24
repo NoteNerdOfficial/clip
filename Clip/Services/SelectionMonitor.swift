@@ -93,6 +93,13 @@ final class SelectionMonitor {
 
     private func postCmdC() {
         guard let source = CGEventSource(stateID: .hidSystemState) else { return }
+        // Without this, macOS's brief post-hardware-event suppression window can
+        // silently drop a synthetic keystroke posted right after the real mouse-up
+        // that triggered it — which is exactly our timing here.
+        source.setLocalEventsFilterDuringSuppressionState(
+            [.permitLocalKeyboardEvents, .permitSystemDefinedEvents],
+            state: .eventSuppressionStateSuppressionInterval
+        )
         let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x08, keyDown: true) // kVK_ANSI_C
         keyDown?.flags = .maskCommand
         let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0x08, keyDown: false)
