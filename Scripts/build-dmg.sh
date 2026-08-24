@@ -13,7 +13,8 @@ DIST_DIR="$(pwd)/dist"
 xcodegen generate
 rm -rf "$BUILD_DIR"
 xcodebuild -project "$APP_NAME.xcodeproj" -scheme "$APP_NAME" -configuration "$CONFIG" \
-  -derivedDataPath "$BUILD_DIR" build CODE_SIGNING_ALLOWED=NO
+  -derivedDataPath "$BUILD_DIR" -destination "generic/platform=macOS" \
+  build CODE_SIGNING_ALLOWED=NO
 
 APP_PATH="$BUILD_DIR/Build/Products/$CONFIG/$APP_NAME.app"
 
