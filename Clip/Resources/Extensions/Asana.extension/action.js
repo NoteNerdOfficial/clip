@@ -18,7 +18,10 @@ function run(argv) {
     return;
   }
 
-  const body = { data: { name: text } };
+  // Assigned to the token's own user by default — otherwise the task is
+  // created successfully but invisible in the default "My Tasks" view,
+  // which is assignee-scoped.
+  const body = { data: { name: text, assignee: "me" } };
   if (workspaceGid) body.data.workspace = workspaceGid;
 
   const stamp = Date.now();
