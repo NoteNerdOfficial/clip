@@ -1,8 +1,7 @@
 import AppKit
 
 /// Detects a text selection in any other app by watching for a drag-select or
-/// multi-click, then simulating Cmd-C and diffing the pasteboard. The user's
-/// prior clipboard contents (string only) are restored afterward.
+/// multi-click, then simulating Cmd-C and diffing the pasteboard.
 @MainActor
 final class SelectionMonitor {
     static let shared = SelectionMonitor()
@@ -41,7 +40,13 @@ final class SelectionMonitor {
             let multiClick = mouseDownClickCount >= 2
             mouseDownLocation = nil
             guard dragged || multiClick else { return }
-            captureSelection(at: upLocation)
+            // Give the target app a brief moment to finish committing its selection
+            // state before synthesizing the copy — some apps (e.g. Electron-based
+            // ones) finalize selection asynchronously relative to the raw mouse event,
+            // so a Cmd-C posted the instant mouse-up fires can copy nothing.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+                self?.captureSelection(at: upLocation)
+            }
         default:
             break
         }
@@ -53,20 +58,17 @@ final class SelectionMonitor {
             return
         }
 
-        let pasteboard = NSPasteboard.general
-        let priorChangeCount = pasteboard.changeCount
-        let priorString = pasteboard.string(forType: .string)
-
+        let priorChangeCount = NSPasteboard.general.changeCount
         postCmdC()
-        pollForChange(priorChangeCount: priorChangeCount, priorString: priorString, attemptsLeft: 12, point: point)
+        pollForChange(priorChangeCount: priorChangeCount, attemptsLeft: 12, point: point)
     }
 
-    private func pollForChange(priorChangeCount: Int, priorString: String?, attemptsLeft: Int, point: NSPoint) {
+    private func pollForChange(priorChangeCount: Int, attemptsLeft: Int, point: NSPoint) {
         let pasteboard = NSPasteboard.general
         if pasteboard.changeCount != priorChangeCount {
+            // Deliberately left on the clipboard, matching what a real Cmd-C would
+            // have done — the user can still paste it normally elsewhere, popup or not.
             let newString = pasteboard.string(forType: .string)
-            restore(priorString: priorString)
-
             guard let text = newString?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return }
             let selection = ClipSelection(
                 text: text,
@@ -79,15 +81,7 @@ final class SelectionMonitor {
 
         guard attemptsLeft > 0 else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) { [weak self] in
-            self?.pollForChange(priorChangeCount: priorChangeCount, priorString: priorString, attemptsLeft: attemptsLeft - 1, point: point)
-        }
-    }
-
-    private func restore(priorString: String?) {
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        if let priorString {
-            pasteboard.setString(priorString, forType: .string)
+            self?.pollForChange(priorChangeCount: priorChangeCount, attemptsLeft: attemptsLeft - 1, point: point)
         }
     }
 
